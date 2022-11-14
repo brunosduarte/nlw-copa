@@ -1,8 +1,8 @@
-import { FastifyInstance } from 'fastify'
-import { prisma } from '../lib/prisma'
-import { z } from 'zod'
-import ShortUniqueId from 'short-unique-id'
-import { authenticate } from '../plugins/authenticate'
+import { z } from "zod"
+import { FastifyInstance } from "fastify"
+import { prisma } from "../lib/prisma"
+import ShortUniqueId from "short-unique-id"
+import { authenticate } from "../plugins/authenticate"
 
 export async function poolRoutes(fastify: FastifyInstance) {
   fastify.get('/pools/count', async () => {
@@ -16,7 +16,7 @@ export async function poolRoutes(fastify: FastifyInstance) {
       title: z.string(),
     })
 
-    const { title } = createPoolBody.parse(request.body)
+    const { title } = createPoolBody.parse(request.body);
 
     const generate = new ShortUniqueId({ length: 6 })
     const code = String(generate()).toUpperCase()
@@ -45,7 +45,8 @@ export async function poolRoutes(fastify: FastifyInstance) {
         }
       })
     }
-    
+
+
 
     return reply.status(201).send({ code })
   })
@@ -66,7 +67,7 @@ export async function poolRoutes(fastify: FastifyInstance) {
       include: {
         participants: {
           where: {
-            userId: request.user.sub
+            userId: request.user.sub,
           }
         }
       }
@@ -80,8 +81,8 @@ export async function poolRoutes(fastify: FastifyInstance) {
 
     if (pool.participants.length > 0) {
       return reply.status(400).send({
-        message: 'You already joined this pool.'
-      });
+        message: 'You are already a join this pool.'
+      })
     }
 
     if (!pool.ownerId) {
@@ -109,93 +110,287 @@ export async function poolRoutes(fastify: FastifyInstance) {
     onRequest: [authenticate]
   }, async (request) => {
     const pools = await prisma.pool.findMany({
-      include: {
-        owner: {
-          select: {
-            id: true,
-            name: true,
-          }
-        },
-        participants: {
-          select: {
-            id: true,
-            user: {
-              select: {
-                avatarUrl: true,
-              }
-            }
-          },
-          take: 4
-        },
-        _count: {
-          select: {
-            participants: true
-          }
-        }
-      },
       where: {
         participants: {
           some: {
             userId: request.user.sub,
           }
         }
+      },
+      include: {
+        _count: {
+          select: {
+            participants: true,
+          }
+        },
+        participants: {
+          select: {
+            id: true,
+
+            user: {
+              select: {
+                avatarUrl: true,
+              }
+            }
+          },
+          take: 4,
+        },
+        owner: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
       }
     })
+
     return { pools }
-  
   })
 
-  fastify.get('/pools/:poolId', {
-    onRequest: [authenticate],
-  }, async (request, reply) => {
+  fastify.get('/pools/:id', {
+    onRequest: [authenticate]
+  }, async (request) => {
     const getPoolParams = z.object({
-      poolId: z.string(),
+      id: z.string(),
     })
 
-    const { poolId } = getPoolParams.parse(request.params)
+    const { id } = getPoolParams.parse(request.params)
 
-    const pool = await prisma.pool.findFirst({
+    const pool = await prisma.pool.findUnique({
+      where: {
+        id,
+      },
       include: {
-        owner: {
+        _count: {
           select: {
-            name: true,
+            participants: true,
           }
         },
         participants: {
           select: {
             id: true,
+
             user: {
               select: {
                 avatarUrl: true,
               }
             }
           },
-          take: 4
+          take: 4,
         },
-        _count: {
+        owner: {
           select: {
-            participants: true
-          }
-        }
-      },
-
-      where: {
-        id: poolId,
-        participants: {
-          some: {
-            userId: request.user.sub,
+            id: true,
+            name: true,
           }
         }
       }
     })
-
-    if (!pool) {
-      return reply.status(400).send({
-        message: 'Pool not found.'
-      })
-    }
-
+    console.log('Pool=>',pool)
     return { pool }
   })
-  
 }
+
+
+// import { FastifyInstance } from 'fastify'
+// import { prisma } from '../lib/prisma'
+// import { z } from 'zod'
+// import ShortUniqueId from 'short-unique-id'
+// import { authenticate } from '../plugins/authenticate'
+
+// export async function poolRoutes(fastify: FastifyInstance) {
+//   fastify.get('/pools/count', async () => {
+//     const count = await prisma.pool.count()
+
+//     return { count }
+//   })
+
+//   fastify.post('/pools', async (request, reply) => {
+//     const createPoolBody = z.object({
+//       title: z.string(),
+//     })
+
+//     const { title } = createPoolBody.parse(request.body)
+
+//     const generate = new ShortUniqueId({ length: 6 })
+//     const code = String(generate()).toUpperCase()
+
+//     try {
+//       await request.jwtVerify()
+
+//       await prisma.pool.create({
+//         data: {
+//           title,
+//           code,
+//           ownerId: request.user.sub,
+
+//           participants: {
+//             create: {
+//               userId: request.user.sub,
+//             }
+//           }
+//         }
+//       })
+//     } catch {
+//       await prisma.pool.create({
+//         data: {
+//           title,
+//           code,
+//         }
+//       })
+//     }
+    
+
+//     return reply.status(201).send({ code })
+//   })
+
+//   fastify.post('/pools/join', {
+//     onRequest: [authenticate]
+//   }, async (request, reply) => {
+//     const joinPoolBody = z.object({
+//       code: z.string(),
+//     })
+
+//     const { code } = joinPoolBody.parse(request.body)
+
+//     const pool = await prisma.pool.findUnique({
+//       where: {
+//         code,
+//       },
+//       include: {
+//         participants: {
+//           where: {
+//             userId: request.user.sub
+//           }
+//         }
+//       }
+//     })
+
+//     if (!pool) {
+//       return reply.status(400).send({
+//         message: 'Pool not found.'
+//       })
+//     }
+
+//     if (pool.participants.length > 0) {
+//       return reply.status(400).send({
+//         message: 'You already joined this pool.'
+//       });
+//     }
+
+//     if (!pool.ownerId) {
+//       await prisma.pool.update({
+//         where: {
+//           id: pool.id,
+//         },
+//         data: {
+//           ownerId: request.user.sub,
+//         }
+//       })
+//     }
+
+//     await prisma.participant.create({
+//       data: {
+//         poolId: pool.id,
+//         userId: request.user.sub,
+//       }
+//     })
+
+//     return reply.status(201).send()
+//   })
+
+//   fastify.get('/pools', {
+//     onRequest: [authenticate]
+//   }, async (request) => {
+//     const pools = await prisma.pool.findMany({
+//       include: {
+//         owner: {
+//           select: {
+//             id: true,
+//             name: true,
+//           }
+//         },
+//         participants: {
+//           select: {
+//             id: true,
+//             user: {
+//               select: {
+//                 avatarUrl: true,
+//               }
+//             }
+//           },
+//           take: 4
+//         },
+//         _count: {
+//           select: {
+//             participants: true
+//           }
+//         }
+//       },
+//       where: {
+//         participants: {
+//           some: {
+//             userId: request.user.sub,
+//           }
+//         }
+//       }
+//     })
+//     return { pools }
+  
+//   })
+
+//   fastify.get('/pools/:poolId', {
+//     onRequest: [authenticate],
+//   }, async (request, reply) => {
+//     const getPoolParams = z.object({
+//       poolId: z.string(),
+//     })
+
+//     const { poolId } = getPoolParams.parse(request.params)
+
+//     const pool = await prisma.pool.findFirst({
+//       include: {
+//         owner: {
+//           select: {
+//             name: true,
+//             id: true,
+//           }
+//         },
+//         participants: {
+//           select: {
+//             id: true,
+//             user: {
+//               select: {
+//                 avatarUrl: true,
+//               }
+//             }
+//           },
+//           take: 4
+//         },
+//         _count: {
+//           select: {
+//             participants: true
+//           }
+//         }
+//       },
+
+//       where: {
+//         id: poolId,
+//         participants: {
+//           some: {
+//             userId: request.user.sub,
+//           }
+//         }
+//       }
+//     })
+
+//     if (!pool) {
+//       return reply.status(400).send({
+//         message: 'Pool not found.'
+//       })
+//     }
+
+//     return { pool }
+//   })
+  
+// }
